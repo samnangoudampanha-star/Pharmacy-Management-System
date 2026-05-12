@@ -8,8 +8,9 @@ use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\Supplier;
+use App\Services\PaymentService;
 use App\Services\StockService;
-use Flasher\SweetAlert\Prime\SweetAlertInterface;
+use Flasher\Prime\FlasherInterface;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +20,10 @@ use Yajra\DataTables\Facades\DataTables;
 
 class PurchaseController extends Controller
 {
-    public function __construct(protected StockService $stockService)
+    public function __construct(
+        protected StockService $stockService,
+        protected PaymentService $paymentService,
+    )
     {
     }
 
@@ -57,7 +61,7 @@ class PurchaseController extends Controller
         ]);
     }
 
-    public function store(Request $request, SweetAlertInterface $flasher): RedirectResponse
+    public function store(Request $request, FlasherInterface $flasher): RedirectResponse
     {
         $data = $this->validated($request);
 
@@ -74,9 +78,13 @@ class PurchaseController extends Controller
             ]);
 
             $this->syncItems($purchase, $data['items']);
+
+            if ($this->affectsStock($purchase->status)) {
+                $this->applyStock($purchase, $data['items']);
+            }
         });
 
-        $flasher->addSuccess(__('Purchase created successfully'));
+        $flasher->success(__('Purchase created successfully'));
 
         return redirect()->route('admin.purchases.index');
     }
@@ -91,19 +99,16 @@ class PurchaseController extends Controller
         ]);
     }
 
-    public function update(Request $request, Purchase $purchase, SweetAlertInterface $flasher): RedirectResponse
+    public function update(Request $request, Purchase $purchase, FlasherInterface $flasher): RedirectResponse
     {
         $data = $this->validated($request);
+        $purchase->loadMissing('items');
 
         DB::transaction(function () use ($purchase, $data, $request) {
-            // Reverse stock for existing items, then re-apply with new lines.
-            foreach ($purchase->items as $existing) {
-                $this->stockService->decrement(
-                    $existing->product_id,
-                    $purchase->branch_id,
-                    (float) $existing->quantity
-                );
+            if ($this->affectsStock($purchase->status)) {
+                $this->reverseStock($purchase);
             }
+
             $purchase->items()->delete();
 
             $purchase->update([
@@ -116,23 +121,30 @@ class PurchaseController extends Controller
             ]);
 
             $this->syncItems($purchase, $data['items']);
+
+            if ($this->affectsStock($purchase->status)) {
+                $this->applyStock($purchase, $data['items']);
+            }
         });
 
-        $flasher->addSuccess(__('Purchase updated successfully'));
+        $flasher->success(__('Purchase updated successfully'));
 
         return redirect()->route('admin.purchases.index');
     }
 
-    public function destroy(Purchase $purchase, SweetAlertInterface $flasher): RedirectResponse
+    public function destroy(Purchase $purchase, FlasherInterface $flasher): RedirectResponse
     {
+        $purchase->loadMissing('items');
+
         DB::transaction(function () use ($purchase) {
-            foreach ($purchase->items as $item) {
-                $this->stockService->decrement($item->product_id, $purchase->branch_id, (float) $item->quantity);
+            if ($this->affectsStock($purchase->status)) {
+                $this->reverseStock($purchase);
             }
+
             $purchase->delete();
         });
 
-        $flasher->addSuccess(__('Purchase deleted successfully'));
+        $flasher->success(__('Purchase deleted successfully'));
 
         return back();
     }
@@ -166,19 +178,49 @@ class PurchaseController extends Controller
                 'expiry_date' => $itemData['expiry_date'] ?? null,
                 'batch_number' => $itemData['batch_number'] ?? null,
             ]);
-
-            $this->stockService->increment($itemData['product_id'], $purchase->branch_id, $lineQty, $lineCost);
         }
 
         $total = $subtotal + $tax;
+        $paid = (float) $purchase->payments()->sum('amount');
+
         $purchase->update([
             'subtotal' => $subtotal,
             'tax' => $tax,
             'discount' => $discount,
             'total' => $total,
-            'paid' => 0,
-            'due' => $total,
+            'paid' => min($paid, $total),
+            'due' => max(0, $total - $paid),
         ]);
+
+        $this->paymentService->syncPayable($purchase);
+    }
+
+    protected function affectsStock(string $status): bool
+    {
+        return $status === 'received';
+    }
+
+    protected function applyStock(Purchase $purchase, array $items): void
+    {
+        foreach ($items as $itemData) {
+            $this->stockService->increment(
+                $itemData['product_id'],
+                $purchase->branch_id,
+                (float) $itemData['quantity'],
+                (float) $itemData['cost_price']
+            );
+        }
+    }
+
+    protected function reverseStock(Purchase $purchase): void
+    {
+        foreach ($purchase->items as $existing) {
+            $this->stockService->decrement(
+                $existing->product_id,
+                $purchase->branch_id,
+                (float) $existing->quantity
+            );
+        }
     }
 
     protected function options(): array
@@ -187,6 +229,7 @@ class PurchaseController extends Controller
             'branches' => Branch::orderBy('name')->get(['id', 'name']),
             'suppliers' => Supplier::orderBy('name')->get(['id', 'name']),
             'products' => Product::orderBy('name')->get(['id', 'sku', 'name', 'cost_price', 'tax_rate']),
+            'statuses' => ['draft', 'received', 'cancelled'],
         ];
     }
 

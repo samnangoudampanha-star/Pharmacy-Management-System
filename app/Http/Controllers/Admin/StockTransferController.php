@@ -8,7 +8,7 @@ use App\Models\Product;
 use App\Models\StockTransfer;
 use App\Models\StockTransferItem;
 use App\Services\StockService;
-use Flasher\SweetAlert\Prime\SweetAlertInterface;
+use Flasher\Prime\FlasherInterface;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -57,7 +57,7 @@ class StockTransferController extends Controller
         ]);
     }
 
-    public function store(Request $request, SweetAlertInterface $flasher): RedirectResponse
+    public function store(Request $request, FlasherInterface $flasher): RedirectResponse
     {
         $data = $this->validated($request);
         if ($data['from_branch_id'] === $data['to_branch_id']) {
@@ -83,12 +83,14 @@ class StockTransferController extends Controller
                     'product_id' => $item['product_id'],
                     'quantity' => $item['quantity'],
                 ]);
-                $this->stockService->decrement($item['product_id'], $transfer->from_branch_id, (float) $item['quantity']);
-                $this->stockService->increment($item['product_id'], $transfer->to_branch_id, (float) $item['quantity']);
+            }
+
+            if ($this->affectsStock($transfer->status)) {
+                $this->applyStock($transfer, $data['items']);
             }
         });
 
-        $flasher->addSuccess(__('Stock transfer created successfully'));
+        $flasher->success(__('Stock transfer created successfully'));
 
         return redirect()->route('admin.stock-transfers.index');
     }
@@ -103,16 +105,16 @@ class StockTransferController extends Controller
         ]);
     }
 
-    public function update(Request $request, StockTransfer $stockTransfer, SweetAlertInterface $flasher): RedirectResponse
+    public function update(Request $request, StockTransfer $stockTransfer, FlasherInterface $flasher): RedirectResponse
     {
         $data = $this->validated($request);
+        $stockTransfer->loadMissing('items');
 
         DB::transaction(function () use ($stockTransfer, $data, $request) {
-            // Reverse old movements.
-            foreach ($stockTransfer->items as $item) {
-                $this->stockService->increment($item->product_id, $stockTransfer->from_branch_id, (float) $item->quantity);
-                $this->stockService->decrement($item->product_id, $stockTransfer->to_branch_id, (float) $item->quantity);
+            if ($this->affectsStock($stockTransfer->status)) {
+                $this->reverseStock($stockTransfer);
             }
+
             $stockTransfer->items()->delete();
 
             $stockTransfer->update([
@@ -130,29 +132,54 @@ class StockTransferController extends Controller
                     'product_id' => $item['product_id'],
                     'quantity' => $item['quantity'],
                 ]);
-                $this->stockService->decrement($item['product_id'], $stockTransfer->from_branch_id, (float) $item['quantity']);
-                $this->stockService->increment($item['product_id'], $stockTransfer->to_branch_id, (float) $item['quantity']);
+            }
+
+            if ($this->affectsStock($stockTransfer->status)) {
+                $this->applyStock($stockTransfer, $data['items']);
             }
         });
 
-        $flasher->addSuccess(__('Stock transfer updated successfully'));
+        $flasher->success(__('Stock transfer updated successfully'));
 
         return redirect()->route('admin.stock-transfers.index');
     }
 
-    public function destroy(StockTransfer $stockTransfer, SweetAlertInterface $flasher): RedirectResponse
+    public function destroy(StockTransfer $stockTransfer, FlasherInterface $flasher): RedirectResponse
     {
+        $stockTransfer->loadMissing('items');
+
         DB::transaction(function () use ($stockTransfer) {
-            foreach ($stockTransfer->items as $item) {
-                $this->stockService->increment($item->product_id, $stockTransfer->from_branch_id, (float) $item->quantity);
-                $this->stockService->decrement($item->product_id, $stockTransfer->to_branch_id, (float) $item->quantity);
+            if ($this->affectsStock($stockTransfer->status)) {
+                $this->reverseStock($stockTransfer);
             }
+
             $stockTransfer->delete();
         });
 
-        $flasher->addSuccess(__('Stock transfer deleted successfully'));
+        $flasher->success(__('Stock transfer deleted successfully'));
 
         return back();
+    }
+
+    protected function affectsStock(string $status): bool
+    {
+        return $status === 'completed';
+    }
+
+    protected function applyStock(StockTransfer $stockTransfer, array $items): void
+    {
+        foreach ($items as $item) {
+            $this->stockService->decrement($item['product_id'], $stockTransfer->from_branch_id, (float) $item['quantity']);
+            $this->stockService->increment($item['product_id'], $stockTransfer->to_branch_id, (float) $item['quantity']);
+        }
+    }
+
+    protected function reverseStock(StockTransfer $stockTransfer): void
+    {
+        foreach ($stockTransfer->items as $item) {
+            $this->stockService->increment($item->product_id, $stockTransfer->from_branch_id, (float) $item->quantity);
+            $this->stockService->decrement($item->product_id, $stockTransfer->to_branch_id, (float) $item->quantity);
+        }
     }
 
     protected function options(): array
@@ -160,6 +187,7 @@ class StockTransferController extends Controller
         return [
             'branches' => Branch::orderBy('name')->get(['id', 'name']),
             'products' => Product::orderBy('name')->get(['id', 'sku', 'name']),
+            'statuses' => ['draft', 'pending', 'completed', 'cancelled'],
         ];
     }
 

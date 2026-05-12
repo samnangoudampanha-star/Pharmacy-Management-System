@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\Product;
 use App\Models\ProductStock;
+use Illuminate\Validation\ValidationException;
 
 class StockService
 {
@@ -33,7 +35,15 @@ class StockService
             ['quantity' => 0, 'avg_cost' => 0]
         );
 
-        $stock->quantity = max(0, (float) $stock->quantity - $quantity);
+        if ((float) $stock->quantity < $quantity) {
+            $productName = Product::query()->whereKey($productId)->value('name') ?? __('Selected product');
+
+            throw ValidationException::withMessages([
+                'items' => __('Insufficient stock for :product in the selected branch.', ['product' => $productName]),
+            ]);
+        }
+
+        $stock->quantity = (float) $stock->quantity - $quantity;
         $stock->save();
 
         return $stock;

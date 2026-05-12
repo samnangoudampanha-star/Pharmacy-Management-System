@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\Customer;
 use App\Models\ExpenseCategory;
 use App\Models\Manufacturer;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Supplier;
 use App\Models\Unit;
@@ -18,17 +19,64 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        $permissionGroups = [
+            'dashboard' => ['dashboard.view'],
+            'masters' => ['branches.manage', 'categories.manage', 'units.manage', 'manufacturers.manage'],
+            'people' => ['users.manage', 'roles.manage', 'permissions.manage', 'suppliers.manage', 'customers.manage'],
+            'inventory' => ['products.manage', 'stocks.view', 'stock_transfers.manage', 'stock_adjustments.manage'],
+            'operations' => ['purchases.manage', 'sales.manage', 'prescriptions.manage'],
+            'finance' => ['expense_categories.manage', 'expenses.manage', 'payments.manage'],
+        ];
+
+        $permissions = collect();
+
+        foreach ($permissionGroups as $group => $names) {
+            foreach ($names as $name) {
+                $permissions->push(
+                    Permission::firstOrCreate(
+                        ['name' => $name],
+                        [
+                            'display_name' => str($name)->replace('.', ' ')->title()->toString(),
+                            'group' => $group,
+                        ]
+                    )
+                );
+            }
+        }
+
         $adminRole = Role::firstOrCreate(
             ['name' => 'admin'],
             ['display_name' => 'Administrator', 'description' => 'Full system access']
         );
-        Role::firstOrCreate(
+        $cashierRole = Role::firstOrCreate(
             ['name' => 'cashier'],
             ['display_name' => 'Cashier', 'description' => 'Sales operations']
         );
-        Role::firstOrCreate(
+        $pharmacistRole = Role::firstOrCreate(
             ['name' => 'pharmacist'],
             ['display_name' => 'Pharmacist', 'description' => 'Prescription handling']
+        );
+
+        $permissionIds = $permissions->keyBy('name');
+
+        $adminRole->permissions()->sync($permissions->pluck('id')->all());
+        $cashierRole->permissions()->sync(
+            $permissionIds->only([
+                'dashboard.view',
+                'customers.manage',
+                'sales.manage',
+                'payments.manage',
+                'stocks.view',
+            ])->pluck('id')->all()
+        );
+        $pharmacistRole->permissions()->sync(
+            $permissionIds->only([
+                'dashboard.view',
+                'products.manage',
+                'stocks.view',
+                'sales.manage',
+                'prescriptions.manage',
+            ])->pluck('id')->all()
         );
 
         $main = Branch::firstOrCreate(

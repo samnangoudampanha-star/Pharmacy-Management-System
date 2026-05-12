@@ -8,8 +8,9 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Services\PaymentService;
 use App\Services\StockService;
-use Flasher\SweetAlert\Prime\SweetAlertInterface;
+use Flasher\Prime\FlasherInterface;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +20,10 @@ use Yajra\DataTables\Facades\DataTables;
 
 class SaleController extends Controller
 {
-    public function __construct(protected StockService $stockService)
+    public function __construct(
+        protected StockService $stockService,
+        protected PaymentService $paymentService,
+    )
     {
     }
 
@@ -57,7 +61,7 @@ class SaleController extends Controller
         ]);
     }
 
-    public function store(Request $request, SweetAlertInterface $flasher): RedirectResponse
+    public function store(Request $request, FlasherInterface $flasher): RedirectResponse
     {
         $data = $this->validated($request);
 
@@ -75,9 +79,13 @@ class SaleController extends Controller
             ]);
 
             $this->syncItems($sale, $data['items'], (float) ($data['paid'] ?? 0));
+
+            if ($this->affectsStock($sale->status)) {
+                $this->applyStock($sale, $data['items']);
+            }
         });
 
-        $flasher->addSuccess(__('Sale created successfully'));
+        $flasher->success(__('Sale created successfully'));
 
         return redirect()->route('admin.sales.index');
     }
@@ -92,16 +100,16 @@ class SaleController extends Controller
         ]);
     }
 
-    public function update(Request $request, Sale $sale, SweetAlertInterface $flasher): RedirectResponse
+    public function update(Request $request, Sale $sale, FlasherInterface $flasher): RedirectResponse
     {
         $data = $this->validated($request);
+        $sale->loadMissing('items');
 
         DB::transaction(function () use ($sale, $data, $request) {
-            foreach ($sale->items as $existing) {
-                $this->stockService->increment(
-                    $existing->product_id, $sale->branch_id, (float) $existing->quantity
-                );
+            if ($this->affectsStock($sale->status)) {
+                $this->reverseStock($sale);
             }
+
             $sale->items()->delete();
 
             $sale->update([
@@ -115,23 +123,30 @@ class SaleController extends Controller
             ]);
 
             $this->syncItems($sale, $data['items'], (float) ($data['paid'] ?? 0));
+
+            if ($this->affectsStock($sale->status)) {
+                $this->applyStock($sale, $data['items']);
+            }
         });
 
-        $flasher->addSuccess(__('Sale updated successfully'));
+        $flasher->success(__('Sale updated successfully'));
 
         return redirect()->route('admin.sales.index');
     }
 
-    public function destroy(Sale $sale, SweetAlertInterface $flasher): RedirectResponse
+    public function destroy(Sale $sale, FlasherInterface $flasher): RedirectResponse
     {
+        $sale->loadMissing('items');
+
         DB::transaction(function () use ($sale) {
-            foreach ($sale->items as $item) {
-                $this->stockService->increment($item->product_id, $sale->branch_id, (float) $item->quantity);
+            if ($this->affectsStock($sale->status)) {
+                $this->reverseStock($sale);
             }
+
             $sale->delete();
         });
 
-        $flasher->addSuccess(__('Sale deleted successfully'));
+        $flasher->success(__('Sale deleted successfully'));
 
         return back();
     }
@@ -163,19 +178,45 @@ class SaleController extends Controller
                 'discount' => $lineDiscount,
                 'subtotal' => $lineSubtotal + $lineTax,
             ]);
-
-            $this->stockService->decrement($itemData['product_id'], $sale->branch_id, $lineQty);
         }
 
         $total = $subtotal + $tax;
+        $recordedPaid = (float) $sale->payments()->sum('amount');
+        $effectivePaid = $recordedPaid > 0 ? $recordedPaid : $paid;
+
         $sale->update([
             'subtotal' => $subtotal,
             'tax' => $tax,
             'discount' => $discount,
             'total' => $total,
-            'paid' => $paid,
-            'due' => max(0, $total - $paid),
+            'paid' => min($effectivePaid, $total),
+            'due' => max(0, $total - $effectivePaid),
         ]);
+
+        $this->paymentService->syncPayable($sale);
+    }
+
+    protected function affectsStock(string $status): bool
+    {
+        return $status === 'completed';
+    }
+
+    protected function applyStock(Sale $sale, array $items): void
+    {
+        foreach ($items as $itemData) {
+            $this->stockService->decrement($itemData['product_id'], $sale->branch_id, (float) $itemData['quantity']);
+        }
+    }
+
+    protected function reverseStock(Sale $sale): void
+    {
+        foreach ($sale->items as $existing) {
+            $this->stockService->increment(
+                $existing->product_id,
+                $sale->branch_id,
+                (float) $existing->quantity
+            );
+        }
     }
 
     protected function options(): array
@@ -185,6 +226,7 @@ class SaleController extends Controller
             'customers' => Customer::orderBy('name')->get(['id', 'name']),
             'products' => Product::orderBy('name')->get(['id', 'sku', 'name', 'sale_price', 'tax_rate']),
             'payment_methods' => ['cash', 'card', 'bank_transfer', 'mobile_payment'],
+            'statuses' => ['draft', 'completed', 'cancelled', 'refunded'],
         ];
     }
 

@@ -1,5 +1,5 @@
 // Bootstrap 5
-@import "bootstrap/scss/bootstrap";
+@use "bootstrap/scss/bootstrap";
 @import "bootstrap-icons/font/bootstrap-icons.css";
 
 // Plugins
@@ -17,14 +17,15 @@
     --skd-header-bg: #ffffff;
 }
 
-html, body {
+html,
+body {
     height: 100%;
-    font-family: 'Roboto', 'Khmer OS Battambang', 'Hanuman', sans-serif;
+    font-family: "Roboto", "Khmer OS Battambang", "Hanuman", sans-serif;
 }
 
 html[lang="km"] body,
 body[data-locale="km"] {
-    font-family: 'Hanuman', 'Khmer OS Battambang', 'Roboto', sans-serif;
+    font-family: "Hanuman", "Khmer OS Battambang", "Roboto", sans-serif;
 }
 
 // Layout shell
@@ -97,7 +98,8 @@ body[data-locale="km"] {
         margin: 0;
 
         > li {
-            > a, > button {
+            > a,
+            > button {
                 display: flex;
                 width: 100%;
                 align-items: center;
@@ -109,7 +111,8 @@ body[data-locale="km"] {
                 text-decoration: none;
                 font-size: 0.92rem;
 
-                &:hover, &.active {
+                &:hover,
+                &.active {
                     color: var(--skd-sidebar-active);
                     background: rgba(255, 255, 255, 0.06);
                 }
@@ -128,7 +131,8 @@ body[data-locale="km"] {
                     text-decoration: none;
                     border-radius: 0.25rem;
 
-                    &:hover, &.active {
+                    &:hover,
+                    &.active {
                         color: var(--skd-sidebar-active);
                         background: rgba(255, 255, 255, 0.05);
                     }
