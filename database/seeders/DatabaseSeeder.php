@@ -2,22 +2,104 @@
 
 namespace Database\Seeders;
 
+use App\Models\Branch;
+use App\Models\Category;
+use App\Models\Customer;
+use App\Models\ExpenseCategory;
+use App\Models\Manufacturer;
+use App\Models\Role;
+use App\Models\Supplier;
+use App\Models\Unit;
 use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $adminRole = Role::firstOrCreate(
+            ['name' => 'admin'],
+            ['display_name' => 'Administrator', 'description' => 'Full system access']
+        );
+        Role::firstOrCreate(
+            ['name' => 'cashier'],
+            ['display_name' => 'Cashier', 'description' => 'Sales operations']
+        );
+        Role::firstOrCreate(
+            ['name' => 'pharmacist'],
+            ['display_name' => 'Pharmacist', 'description' => 'Prescription handling']
+        );
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        $main = Branch::firstOrCreate(
+            ['code' => 'MAIN'],
+            [
+                'name' => 'Main Pharmacy',
+                'phone' => '+855 12 345 678',
+                'email' => 'main@pharmacy.local',
+                'city' => 'Phnom Penh',
+                'country' => 'Cambodia',
+                'is_main' => true,
+                'is_active' => true,
+            ]
+        );
+
+        Branch::firstOrCreate(
+            ['code' => 'BR-01'],
+            [
+                'name' => 'Branch 01',
+                'phone' => '+855 12 000 000',
+                'email' => 'br01@pharmacy.local',
+                'city' => 'Siem Reap',
+                'country' => 'Cambodia',
+                'is_active' => true,
+            ]
+        );
+
+        User::firstOrCreate(
+            ['email' => 'admin@pharmacy.local'],
+            [
+                'name' => 'Administrator',
+                'password' => Hash::make('password'),
+                'branch_id' => $main->id,
+                'role_id' => $adminRole->id,
+                'is_active' => true,
+            ]
+        );
+
+        foreach ([
+            ['name' => 'Antibiotic', 'slug' => 'antibiotic'],
+            ['name' => 'Pain Reliever', 'slug' => 'pain-reliever'],
+            ['name' => 'Vitamin', 'slug' => 'vitamin'],
+            ['name' => 'Cold & Flu', 'slug' => 'cold-flu'],
+        ] as $row) {
+            Category::firstOrCreate(['slug' => $row['slug']], $row);
+        }
+
+        foreach ([
+            ['name' => 'Piece', 'symbol' => 'pcs'],
+            ['name' => 'Box', 'symbol' => 'box'],
+            ['name' => 'Bottle', 'symbol' => 'btl'],
+            ['name' => 'Milliliter', 'symbol' => 'ml'],
+        ] as $row) {
+            Unit::firstOrCreate(['symbol' => $row['symbol']], $row);
+        }
+
+        Manufacturer::firstOrCreate(['name' => 'Generic Pharma Co.'], ['country' => 'Cambodia']);
+        Manufacturer::firstOrCreate(['name' => 'Acme Pharmaceuticals'], ['country' => 'Vietnam']);
+
+        Supplier::firstOrCreate(
+            ['code' => 'SUP-001'],
+            ['name' => 'MediWholesale Distribution', 'phone' => '+855 99 111 222']
+        );
+
+        Customer::firstOrCreate(
+            ['code' => 'WALKIN'],
+            ['name' => 'Walk-in Customer', 'is_active' => true]
+        );
+
+        foreach (['Rent', 'Utilities', 'Salaries', 'Maintenance'] as $name) {
+            ExpenseCategory::firstOrCreate(['name' => $name]);
+        }
     }
 }
