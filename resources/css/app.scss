@@ -1,0 +1,178 @@
+// Bootstrap 5
+@import "bootstrap/scss/bootstrap";
+@import "bootstrap-icons/font/bootstrap-icons.css";
+
+// Plugins
+@import "sweetalert2/dist/sweetalert2.min.css";
+@import "flatpickr/dist/flatpickr.min.css";
+@import "tom-select/dist/css/tom-select.bootstrap5.css";
+@import "datatables.net-bs5/css/dataTables.bootstrap5.css";
+@import "datatables.net-buttons-bs5/css/buttons.bootstrap5.css";
+
+:root {
+    --bs-primary: #0d6efd;
+    --skd-sidebar-bg: #0c1427;
+    --skd-sidebar-color: rgba(255, 255, 255, 0.7);
+    --skd-sidebar-active: #ffffff;
+    --skd-header-bg: #ffffff;
+}
+
+html, body {
+    height: 100%;
+    font-family: 'Roboto', 'Khmer OS Battambang', 'Hanuman', sans-serif;
+}
+
+html[lang="km"] body,
+body[data-locale="km"] {
+    font-family: 'Hanuman', 'Khmer OS Battambang', 'Roboto', sans-serif;
+}
+
+// Layout shell
+.wrapper {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    grid-template-rows: 64px 1fr;
+    grid-template-areas:
+        "sidebar header"
+        "sidebar main";
+    background: #f4f5f9;
+
+    @media (max-width: 991.98px) {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "header"
+            "main";
+
+        .sidebar-wrapper {
+            position: fixed;
+            inset: 0 auto 0 0;
+            transform: translateX(-100%);
+            transition: transform 0.25s ease;
+            z-index: 1050;
+
+            &.is-open {
+                transform: translateX(0);
+            }
+        }
+    }
+}
+
+.top-header {
+    grid-area: header;
+    background: var(--skd-header-bg);
+    border-bottom: 1px solid #e6e8ec;
+    padding: 0.5rem 1.25rem;
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+}
+
+.sidebar-wrapper {
+    grid-area: sidebar;
+    background: var(--skd-sidebar-bg);
+    color: var(--skd-sidebar-color);
+    padding: 1rem 0;
+    overflow-y: auto;
+
+    .sidebar-header {
+        padding: 0.5rem 1.25rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        margin-bottom: 0.75rem;
+    }
+
+    .logo-text {
+        color: #fff;
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+
+    .metismenu {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+
+        > li {
+            > a, > button {
+                display: flex;
+                width: 100%;
+                align-items: center;
+                gap: 0.65rem;
+                background: transparent;
+                border: 0;
+                color: var(--skd-sidebar-color);
+                padding: 0.65rem 1.25rem;
+                text-decoration: none;
+                font-size: 0.92rem;
+
+                &:hover, &.active {
+                    color: var(--skd-sidebar-active);
+                    background: rgba(255, 255, 255, 0.06);
+                }
+            }
+
+            ul {
+                list-style: none;
+                padding-left: 2.4rem;
+                margin: 0 0 0.5rem;
+
+                a {
+                    display: block;
+                    padding: 0.4rem 0.75rem;
+                    font-size: 0.85rem;
+                    color: var(--skd-sidebar-color);
+                    text-decoration: none;
+                    border-radius: 0.25rem;
+
+                    &:hover, &.active {
+                        color: var(--skd-sidebar-active);
+                        background: rgba(255, 255, 255, 0.05);
+                    }
+                }
+            }
+        }
+    }
+}
+
+.page-content {
+    grid-area: main;
+    padding: 1.25rem 1.5rem 2rem;
+}
+
+.page-breadcrumb {
+    background: transparent;
+}
+
+.card {
+    border: 0;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.04);
+    border-radius: 0.5rem;
+}
+
+.dataTables_wrapper {
+    .pagination {
+        margin-bottom: 0;
+    }
+
+    .row {
+        align-items: center;
+    }
+
+    .dt-buttons {
+        margin-bottom: 0.5rem;
+    }
+}
+
+.lang-switcher {
+    .dropdown-toggle {
+        border: 1px solid #dee2e6;
+        background: #fff;
+        padding: 0.35rem 0.65rem;
+        border-radius: 0.375rem;
+        color: #495057;
+    }
+}
