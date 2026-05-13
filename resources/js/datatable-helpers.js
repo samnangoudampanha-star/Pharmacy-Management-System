@@ -1,4 +1,3 @@
-import $ from 'jquery';
 import Swal from 'sweetalert2';
 import { router } from '@inertiajs/vue3';
 import { trans } from '@/i18n';
@@ -35,36 +34,51 @@ function clickHandler(e) {
 
 export function installDataTableActions() {
     if (handlerInstalled) return;
-    $(document).on(
-        'click',
-        '.dataTables_wrapper [data-link], .dataTables_wrapper [data-delete]',
-        clickHandler
-    );
+    document.addEventListener('click', clickHandler);
     handlerInstalled = true;
 }
 
 export function renderActions(data) {
     return `<div class="d-inline-flex gap-1">
         ${
-            data.edit_url
+            data && data.edit_url
                 ? `<a href="${data.edit_url}" data-link class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>`
                 : ''
         }
         ${
-            data.delete_url
+            data && data.delete_url
                 ? `<button data-delete="${data.delete_url}" type="button" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>`
                 : ''
         }
     </div>`;
 }
 
-export function renderBoolean(value, trueLabel = null, falseLabel = null) {
-    return value
-        ? `<span class="badge bg-success">${trueLabel || trans('common.active')}</span>`
-        : `<span class="badge bg-secondary">${falseLabel || trans('common.inactive')}</span>`;
+// DataTables calls render(data, type, row, meta). Only emit HTML for 'display' /
+// 'filter' so that sort/type retain the raw value.
+export function renderBoolean(value, type, _row, _meta, opts = {}) {
+    // Allow direct invocation: renderBoolean(true) — treat 2nd arg as `type` only
+    // when it's a DataTables type token (string in known set), otherwise fall
+    // back to legacy two-arg form `renderBoolean(value, trueLabel, falseLabel)`.
+    let trueLabel = opts.trueLabel;
+    let falseLabel = opts.falseLabel;
+    const isDtType = typeof type === 'string' && ['display', 'filter', 'sort', 'type', 'sp'].includes(type);
+    if (!isDtType && typeof type === 'string') {
+        // Legacy two-arg form used by callers like `renderBoolean(v, 'Yes', 'No')`.
+        trueLabel = type;
+        falseLabel = _row;
+        type = 'display';
+    }
+    if (type && type !== 'display' && type !== 'filter') return value ? 1 : 0;
+
+    const truthy = !!Number(value) || value === true || value === 'true';
+    if (truthy) {
+        return `<span class="badge bg-success">${trueLabel || trans('common.active')}</span>`;
+    }
+    return `<span class="badge bg-secondary">${falseLabel || trans('common.inactive')}</span>`;
 }
 
-export function renderMoney(value) {
+export function renderMoney(value, type) {
+    if (type && type !== 'display' && type !== 'filter') return Number(value || 0);
     const n = Number(value || 0);
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
