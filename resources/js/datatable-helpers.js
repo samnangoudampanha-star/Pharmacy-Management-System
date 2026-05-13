@@ -26,7 +26,12 @@ function clickHandler(e) {
             cancelButtonText: trans('common.cancel'),
         }).then((result) => {
             if (result.isConfirmed) {
-                router.delete(url, { preserveScroll: true });
+                router.delete(url, {
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        document.dispatchEvent(new CustomEvent('datatables:reload'));
+                    },
+                });
             }
         });
     }

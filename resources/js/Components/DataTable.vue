@@ -84,11 +84,17 @@ function initTable() {
     });
 }
 
+function reloadHandler() {
+    if (dt) dt.ajax.reload(null, false);
+}
+
 onMounted(() => {
     initTable();
+    document.addEventListener('datatables:reload', reloadHandler);
 });
 
 onBeforeUnmount(() => {
+    document.removeEventListener('datatables:reload', reloadHandler);
     if (dt) {
         dt.destroy();
         dt = null;
